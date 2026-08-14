@@ -64,33 +64,57 @@ HTML = """
 
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    width: 100%;
+    background: #020817;
+  }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+  }
   .tetris-shell {
+    width: min(100%, 920px);
     display: flex;
     gap: 18px;
     align-items: flex-start;
     justify-content: center;
-    margin-top: 8px;
+    margin: 0 auto;
     padding: 18px;
     background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(17,24,39,0.96));
     border-radius: 18px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+    flex-wrap: wrap;
   }
   .game-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #0f172a;
     border: 4px solid #374151;
     border-radius: 10px;
     padding: 0;
+    flex: 0 0 auto;
   }
   #board {
     display: block;
+    width: min(82vw, 300px);
+    height: auto;
     background: #0f172a;
+    touch-action: none;
+    user-select: none;
   }
   .side-panel {
     display: flex;
     flex-direction: column;
     gap: 12px;
     min-width: 180px;
+    width: min(100%, 220px);
+    flex: 1 1 180px;
   }
   .info-box {
     background: #111827;
@@ -121,11 +145,16 @@ HTML = """
   }
   .start-overlay {
     position: fixed;
-    inset: 0;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, 86vw);
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(15, 23, 42, 0.78);
+    border-radius: 18px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
     z-index: 20;
   }
   .start-overlay.hidden {
@@ -175,10 +204,73 @@ HTML = """
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.28);
   }
   .mobile-controls button {
-    padding: 8px 6px;
-    font-size: 14px;
+    min-height: 52px;
+    padding: 10px 8px;
+    font-size: 15px;
+    font-weight: 800;
+    border-radius: 12px;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 760px) {
+    body {
+      padding: 8px;
+      align-items: flex-start;
+    }
+
+    .tetris-shell {
+      width: min(100%, 520px);
+      padding: 12px;
+      gap: 12px;
+    }
+
+    .game-panel {
+      width: 100%;
+    }
+
+    #board {
+      width: min(88vw, 320px);
+    }
+
+    .side-panel {
+      width: min(100%, 420px);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .controls button {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .tetris-shell {
+      padding: 10px;
+    }
+
+    .info-box p {
+      font-size: 20px;
+    }
+
+    .mobile-controls {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mobile-controls button[data-action="space"] {
+      grid-column: span 2;
+    }
   }
 </style>
 
