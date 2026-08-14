@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Tetris Game", page_icon="🎮", layout="wide")
 st.title("🎮 Tetris")
@@ -9,7 +12,7 @@ HTML = """
   <div class="overlay-card">
     <h1 id="overlay-title">Tetris</h1>
     <p id="overlay-text">방향키로 이동하고, C로 홀드, Space로 드롭하세요.</p>
-    <button id="overlay-start-btn">Start Game</button>
+    <button id="overlay-start-btn" type="button">Start Game</button>
   </div>
 </div>
 
@@ -44,9 +47,9 @@ HTML = """
       <canvas id="next" width="120" height="120"></canvas>
     </div>
     <div class="controls">
-      <button id="start-btn">Start</button>
-      <button id="pause-btn">Pause</button>
-      <button id="restart-btn">Restart</button>
+      <button id="start-btn" type="button">Start</button>
+      <button id="pause-btn" type="button">Pause</button>
+      <button id="restart-btn" type="button">Restart</button>
     </div>
     <div class="mobile-controls">
       <button data-action="left">◀</button>
@@ -207,11 +210,11 @@ HTML = """
   };
 
   const boardCanvas = document.getElementById('board');
-  const boardCtx = boardCanvas.getContext('2d');
+  const boardCtx = boardCanvas.getContext('2d', { alpha: false });
   const nextCanvas = document.getElementById('next');
-  const nextCtx = nextCanvas.getContext('2d');
+  const nextCtx = nextCanvas.getContext('2d', { alpha: false });
   const holdCanvas = document.getElementById('hold');
-  const holdCtx = holdCanvas.getContext('2d');
+  const holdCtx = holdCanvas.getContext('2d', { alpha: false });
 
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best-score');
@@ -335,13 +338,29 @@ HTML = """
     return cleared;
   }
 
+  function readBestScore() {
+    try {
+      return Number(window.localStorage.getItem('tetris-best-score') || 0);
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  function saveBestScore(value) {
+    try {
+      window.localStorage.setItem('tetris-best-score', String(value));
+    } catch (error) {
+      // ignore storage restrictions in sandboxed iframe contexts
+    }
+  }
+
   let board = createBoard();
   let currentPiece = null;
   let nextPiece = null;
   let holdPiece = null;
   let canHold = true;
   let score = 0;
-  let bestScore = Number(localStorage.getItem('tetris-best-score') || 0);
+  let bestScore = readBestScore();
   let lines = 0;
   let level = 1;
   let dropInterval = BASE_DROP_INTERVAL;
@@ -448,17 +467,21 @@ HTML = """
   function drawPreview(context, piece, canvas) {
     context.clearRect(0, 0, canvas.width, canvas.height);
     if (!piece) return;
+
     const matrix = piece.matrix;
     const offsetX = Math.floor((4 - matrix[0].length) / 2);
     const offsetY = Math.floor((4 - matrix.length) / 2);
+    const color = COLORS[piece.type];
+
     matrix.forEach((row, y) => {
       row.forEach((value, x) => {
-        if (value) {
-          context.fillStyle = COLORS[piece.type];
-          context.fillRect((x + offsetX) * 20, (y + offsetY) * 20, 20, 20);
-          context.strokeStyle = '#1f2937';
-          context.strokeRect((x + offsetX) * 20, (y + offsetY) * 20, 20, 20);
-        }
+        if (!value) return;
+        const px = (x + offsetX) * 20;
+        const py = (y + offsetY) * 20;
+        context.fillStyle = color;
+        context.fillRect(px, py, 20, 20);
+        context.strokeStyle = '#1f2937';
+        context.strokeRect(px, py, 20, 20);
       });
     });
   }
@@ -482,7 +505,7 @@ HTML = """
     if (collide(board, currentPiece)) {
       gameOver = true;
       bestScore = Math.max(bestScore, score);
-      localStorage.setItem('tetris-best-score', String(bestScore));
+      saveBestScore(bestScore);
       updateHud();
     }
   }
@@ -550,7 +573,7 @@ HTML = """
     if (distance > 0) {
       score += distance * 2;
       bestScore = Math.max(bestScore, score);
-      localStorage.setItem('tetris-best-score', String(bestScore));
+      saveBestScore(bestScore);
     }
     updateHud();
   }
@@ -603,65 +626,109 @@ HTML = """
     requestAnimationFrame(loop);
   }
 
-  document.getElementById('start-btn').addEventListener('click', startGame);
-  document.getElementById('restart-btn').addEventListener('click', startGame);
-  document.getElementById('pause-btn').addEventListener('click', togglePause);
-  overlayStartBtn.addEventListener('click', () => {
-    if (paused) {
-      togglePause();
-      return;
-    }
-    if (gameOver) {
+  function bindControls() {
+    window.startGame = startGame;
+    window.togglePause = togglePause;
+    window.dispatchTetrisStart = () => {
+      if (paused) {
+        togglePause();
+        return;
+      }
       startGame();
-      return;
-    }
-    startGame();
-  });
+    };
+    window.dispatchTetrisPause = togglePause;
 
-  document.querySelectorAll('[data-action]').forEach((button) => {
-    button.addEventListener('click', () => {
-      ensureAudio();
-      const action = button.dataset.action;
-      if (action === 'left') {
-        movePiece(-1, 0); playTone(220, 0.05, 'square', 0.025);
+    const startButton = document.getElementById('start-btn');
+    const restartButton = document.getElementById('restart-btn');
+    const pauseButton = document.getElementById('pause-btn');
+
+    const triggerStart = () => {
+      if (paused) {
+        togglePause();
+        return;
       }
-      if (action === 'right') {
-        movePiece(1, 0); playTone(300, 0.05, 'square', 0.025);
+      startGame();
+    };
+
+    const bindClick = (element, handler) => {
+      if (!element) return;
+      element.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handler();
+      };
+      element.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handler();
+      }, { passive: false });
+    };
+
+    bindClick(startButton, startGame);
+    bindClick(restartButton, startGame);
+    bindClick(pauseButton, togglePause);
+    bindClick(overlayStartBtn, triggerStart);
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || !document.getElementById('overlay')) return;
+      if (!overlay.classList.contains('hidden')) {
+        const clickedOverlayButton = target.closest && target.closest('#overlay-start-btn');
+        if (clickedOverlayButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          triggerStart();
+        }
       }
-      if (action === 'down') {
-        movePiece(0, 1); score += 1; playTone(180, 0.04, 'square', 0.02);
-      }
-      if (action === 'rotate') {
-        rotateCurrent(); playTone(400, 0.06, 'triangle', 0.03);
-      }
-      if (action === 'drop') {
-        hardDrop(); playTone(520, 0.08, 'sawtooth', 0.04);
-      }
-      if (action === 'hold') {
-        holdCurrent(); playTone(600, 0.08, 'triangle', 0.04);
-      }
+    }, true);
+
+    document.querySelectorAll('[data-action]').forEach((button) => {
+      button.onclick = () => {
+        ensureAudio();
+        const action = button.dataset.action;
+        if (action === 'left') {
+          movePiece(-1, 0); playTone(220, 0.05, 'square', 0.025);
+        }
+        if (action === 'right') {
+          movePiece(1, 0); playTone(300, 0.05, 'square', 0.025);
+        }
+        if (action === 'down') {
+          movePiece(0, 1); score += 1; playTone(180, 0.04, 'square', 0.02);
+        }
+        if (action === 'rotate') {
+          rotateCurrent(); playTone(400, 0.06, 'triangle', 0.03);
+        }
+        if (action === 'drop') {
+          hardDrop(); playTone(520, 0.08, 'sawtooth', 0.04);
+        }
+        if (action === 'hold') {
+          holdCurrent(); playTone(600, 0.08, 'triangle', 0.04);
+        }
+      };
     });
-  });
 
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') { movePiece(-1, 0); playTone(220, 0.05, 'square', 0.025); }
-    if (event.key === 'ArrowRight') { movePiece(1, 0); playTone(300, 0.05, 'square', 0.025); }
-    if (event.key === 'ArrowDown') { movePiece(0, 1); score += 1; playTone(180, 0.04, 'square', 0.02); }
-    if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'x') { rotateCurrent(); playTone(400, 0.06, 'triangle', 0.03); }
-    if (event.key === ' ') {
-      event.preventDefault();
-      hardDrop();
-      playTone(520, 0.08, 'sawtooth', 0.04);
-    }
-    if (event.key.toLowerCase() === 'c') { holdCurrent(); playTone(600, 0.08, 'triangle', 0.04); }
-    if (event.key.toLowerCase() === 'p') togglePause();
-  });
+    document.onkeydown = (event) => {
+      if (event.key === 'ArrowLeft') { movePiece(-1, 0); playTone(220, 0.05, 'square', 0.025); }
+      if (event.key === 'ArrowRight') { movePiece(1, 0); playTone(300, 0.05, 'square', 0.025); }
+      if (event.key === 'ArrowDown') { movePiece(0, 1); score += 1; playTone(180, 0.04, 'square', 0.02); }
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'x') { rotateCurrent(); playTone(400, 0.06, 'triangle', 0.03); }
+      if (event.key === ' ') {
+        event.preventDefault();
+        hardDrop();
+        playTone(520, 0.08, 'sawtooth', 0.04);
+      }
+      if (event.key.toLowerCase() === 'c') { holdCurrent(); playTone(600, 0.08, 'triangle', 0.04); }
+      if (event.key.toLowerCase() === 'p') togglePause();
+    };
+  }
 
-  bestScore = Number(localStorage.getItem('tetris-best-score') || 0);
+  bestScore = readBestScore();
   showOverlay('Tetris', '방향키로 이동하고, C로 홀드, Space로 드롭하세요.', 'Start Game');
   updateHud();
+  bindControls();
   requestAnimationFrame(loop);
 </script>
 """
 
-st.html(HTML, width="stretch", unsafe_allow_javascript=True)
+html = (Path(__file__).resolve().parent / "game.html").read_text(encoding="utf-8")
+components.html(html, height=820, scrolling=False)
