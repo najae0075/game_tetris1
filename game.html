@@ -27,6 +27,8 @@
     #board {
       display: block;
       background: #0f172a;
+      touch-action: none;
+      user-select: none;
     }
     .side-panel {
       display: flex;
@@ -117,10 +119,59 @@
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
+      margin-top: 4px;
     }
     .mobile-controls button {
-      padding: 8px 6px;
-      font-size: 14px;
+      min-height: 48px;
+      padding: 10px 8px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 10px;
+      box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+      transition: transform 0.08s ease, filter 0.08s ease;
+      touch-action: manipulation;
+    }
+    .mobile-controls button:active,
+    .mobile-controls button.control-pressed {
+      transform: translateY(1px) scale(0.98);
+      filter: brightness(1.08);
+    }
+    .mobile-controls button[data-action="drop"],
+    .mobile-controls button[data-action="hold"] {
+      grid-column: span 1;
+    }
+    .mobile-controls button[data-action="drop"] {
+      background: #f59e0b;
+    }
+    .mobile-controls button[data-action="hold"] {
+      background: #10b981;
+    }
+    .mobile-controls button[data-action="rotate"] {
+      background: #7c3aed;
+    }
+    .mobile-controls button[data-action="left"],
+    .mobile-controls button[data-action="right"],
+    .mobile-controls button[data-action="down"] {
+      background: #2563eb;
+    }
+    .mobile-controls button[data-action="space"] {
+      background: #ef4444;
+      grid-column: span 3;
+    }
+    .mobile-tip {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #e2e8f0;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .mobile-tip strong {
+      color: #f8fafc;
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
     }
   </style>
 </head>
@@ -170,11 +221,18 @@
       </div>
       <div class="mobile-controls">
         <button data-action="left">◀</button>
-        <button data-action="right">▶</button>
         <button data-action="rotate">⟳</button>
+        <button data-action="right">▶</button>
         <button data-action="down">▼</button>
-        <button data-action="drop">Drop</button>
         <button data-action="hold">Hold</button>
+        <button data-action="drop">Drop</button>
+        <button data-action="space" style="grid-column: span 3; background: #ef4444;">Space</button>
+      </div>
+      <div class="mobile-tip">
+        <strong>모바일 사용법</strong>
+        좌/우 스와이프 이동<br>
+        아래 스와이프 빠르게 낙하<br>
+        위 스와이프 회전 / Hold · Drop 버튼 사용
       </div>
     </aside>
   </div>
@@ -232,6 +290,14 @@
 
     function hideOverlay() {
       overlay.classList.add('hidden');
+    }
+
+    function pressControlButton(button) {
+      if (!button) return;
+      button.classList.remove('control-pressed');
+      void button.offsetWidth;
+      button.classList.add('control-pressed');
+      setTimeout(() => button.classList.remove('control-pressed'), 120);
     }
 
     function ensureAudio() {
@@ -496,6 +562,7 @@
         gameOver = true;
         bestScore = Math.max(bestScore, score);
         saveBestScore(bestScore);
+        showOverlay('Game Over', '다시 시작하려면 아래 버튼을 누르세요.', 'Restart');
         updateHud();
       }
     }
@@ -616,6 +683,47 @@
       requestAnimationFrame(loop);
     }
 
+    function handleBoardTouchStart(event) {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      window.__tetrisTouchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
+      };
+      if (event.preventDefault) event.preventDefault();
+    }
+
+    function handleBoardTouchEnd(event) {
+      const touch = event.changedTouches && event.changedTouches[0];
+      const start = window.__tetrisTouchStart;
+      if (!touch || !start) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if (gameOver || !gameStarted) return;
+      if (absX < 18 && absY < 18) {
+        rotateCurrent();
+        return;
+      }
+      if (absX > absY) {
+        if (dx < 0) movePiece(-1, 0);
+        if (dx > 0) movePiece(1, 0);
+      } else {
+        if (dy > 0) {
+          movePiece(0, 1);
+          score += 1;
+        }
+        if (dy < 0) {
+          rotateCurrent();
+        }
+      }
+      if (event.preventDefault) event.preventDefault();
+      window.__tetrisTouchStart = null;
+    }
+
     function bindControls() {
       window.startGame = startGame;
       window.togglePause = togglePause;
@@ -627,6 +735,11 @@
         startGame();
       };
       window.dispatchTetrisPause = togglePause;
+      window.handleBoardTouchStart = handleBoardTouchStart;
+      window.handleBoardTouchEnd = handleBoardTouchEnd;
+
+      boardCanvas.addEventListener('touchstart', handleBoardTouchStart, { passive: false });
+      boardCanvas.addEventListener('touchend', handleBoardTouchEnd, { passive: false });
 
       const startButton = document.getElementById('start-btn');
       const restartButton = document.getElementById('restart-btn');
@@ -642,11 +755,18 @@
 
       const bindClick = (element, handler) => {
         if (!element) return;
-        element.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
+
+        const runHandler = (event) => {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
           handler();
         };
+
+        element.onclick = runHandler;
+        element.onpointerdown = runHandler;
+        element.onmousedown = runHandler;
         element.addEventListener('touchstart', (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -654,7 +774,7 @@
         }, { passive: false });
       };
 
-      bindClick(startButton, startGame);
+      bindClick(startButton, triggerStart);
       bindClick(restartButton, startGame);
       bindClick(pauseButton, togglePause);
       bindClick(overlayStartBtn, triggerStart);
@@ -673,8 +793,9 @@
       }, true);
 
       document.querySelectorAll('[data-action]').forEach((button) => {
-        button.onclick = () => {
+        button.onclick = (event) => {
           ensureAudio();
+          pressControlButton(button);
           const action = button.dataset.action;
           if (action === 'left') { movePiece(-1, 0); playTone(220, 0.05, 'square', 0.025); }
           if (action === 'right') { movePiece(1, 0); playTone(300, 0.05, 'square', 0.025); }
@@ -682,6 +803,7 @@
           if (action === 'rotate') { rotateCurrent(); playTone(400, 0.06, 'triangle', 0.03); }
           if (action === 'drop') { hardDrop(); playTone(520, 0.08, 'sawtooth', 0.04); }
           if (action === 'hold') { holdCurrent(); playTone(600, 0.08, 'triangle', 0.04); }
+          if (action === 'space') { event.preventDefault(); hardDrop(); playTone(520, 0.08, 'sawtooth', 0.04); }
         };
       });
 
