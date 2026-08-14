@@ -146,7 +146,7 @@
     }
     button:hover { background: #1d4ed8; }
     .mobile-controls {
-      display: grid;
+      display: none;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       margin-top: 8px;
@@ -154,6 +154,9 @@
       border-radius: 12px;
       background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(148, 163, 184, 0.28);
+    }
+    body.touch-device .mobile-controls {
+      display: grid;
     }
     .mobile-controls button {
       min-height: 52px;
@@ -313,14 +316,14 @@
         <button id="pause-btn" type="button">Pause</button>
         <button id="restart-btn" type="button">Restart</button>
       </div>
-      <div class="mobile-controls">
-        <button data-action="left">◀</button>
-        <button data-action="rotate">⟳</button>
-        <button data-action="right">▶</button>
-        <button data-action="down">▼</button>
-        <button data-action="hold">Hold</button>
-        <button data-action="drop">Drop</button>
-        <button data-action="space" style="grid-column: span 3; background: #ef4444;">Space</button>
+      <div class="mobile-controls" aria-label="모바일 조작 키보드">
+        <button data-action="left" aria-label="왼쪽 이동">◀</button>
+        <button data-action="rotate" aria-label="회전">⟳</button>
+        <button data-action="right" aria-label="오른쪽 이동">▶</button>
+        <button data-action="down" aria-label="한칸 아래">▼</button>
+        <button data-action="hold" aria-label="홀드">Hold</button>
+        <button data-action="drop" aria-label="하드 드롭">Drop</button>
+        <button data-action="space" aria-label="바로 내리기" style="grid-column: span 3; background: #ef4444;">Space</button>
       </div>
       <div class="mobile-tip">
         <strong>모바일 사용법</strong>
@@ -504,6 +507,22 @@
       }
     }
 
+    function notifyGameOverToParent() {
+      const payload = {
+        user: window.__selectedUser || 'Unknown',
+        score: Number(score || 0),
+        lines: Number(lines || 0),
+        level: Number(level || 1)
+      };
+
+      if (window.parent && window.parent.postMessage) {
+        window.parent.postMessage({
+          type: 'streamlit:setComponentValue',
+          value: payload
+        }, '*');
+      }
+    }
+
     let board = createBoard();
     let currentPiece = null;
     let nextPiece = null;
@@ -656,6 +675,7 @@
         gameOver = true;
         bestScore = Math.max(bestScore, score);
         saveBestScore(bestScore);
+        notifyGameOverToParent();
         showOverlay('Game Over', '다시 시작하려면 아래 버튼을 누르세요.', 'Restart');
         updateHud();
       }
@@ -841,6 +861,9 @@
     }
 
     function bindControls() {
+      const isTouchDevice = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      document.body.classList.toggle('touch-device', isTouchDevice);
+
       window.startGame = startGame;
       window.togglePause = togglePause;
       window.dispatchTetrisStart = () => {

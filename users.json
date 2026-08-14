@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "name": "나재곤",
+    "score": 0,
+    "best_score": 0,
+    "games_played": 1,
+    "history": [
+      {
+        "recorded_at": "2026-08-14 14:10:19",
+        "score": 0,
+        "lines": 0,
+        "level": 1
+      }
+    ]
+  }
+]
